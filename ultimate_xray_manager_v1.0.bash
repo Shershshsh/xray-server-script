@@ -216,10 +216,17 @@ function init_reality_config() {
     
     echo -e "${CYAN}--- Создание конфига Xray (Reality, SplitHTTP, gRPC) ---${NC}"
     
-    KEYS=$(xray x25519)
-    PRIVATE_KEY=$(echo "$KEYS" | grep "Private key" | awk '{print $3}')
-    PUBLIC_KEY=$(echo "$KEYS" | grep "Public key" | awk '{print $3}')
+    # Используем абсолютный путь, так как среда sudo может обрезать $PATH
+    KEYS=$(/usr/local/bin/xray x25519)
+    PRIVATE_KEY=$(echo "$KEYS" | grep -i "Private key" | awk '{print $3}')
+    PUBLIC_KEY=$(echo "$KEYS" | grep -i "Public key" | awk '{print $3}')
     SHORT_ID=$(openssl rand -hex 4)
+
+    # Защита: если ключи не сгенерировались, прерываем создание конфига
+    if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
+        echo -e "${RED}Ошибка: Не удалось сгенерировать ключи Reality. Проверьте, установлен ли Xray (/usr/local/bin/xray).${NC}"
+        return
+    fi
 
     mkdir -p /var/log/xray
     
@@ -506,7 +513,7 @@ function update_xray() {
 
     restart_xray
     echo -e "${GREEN}Текущая версия Xray:${NC}"
-    xray version
+    /usr/local/bin/xray version
     echo ""
 }
 
