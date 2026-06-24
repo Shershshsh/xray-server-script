@@ -192,9 +192,10 @@ EOF
     systemctl enable nginx
     
     echo -e "${CYAN}--- Установка чистого Xray Core ---${NC}"
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install > /dev/null
+    # Убрали > /dev/null чтобы в случае ошибки скрипт XTLS не молчал, а показал проблему
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
     
-    # ПРАВКА: Скачиваем расширенные базы данных маршрутизации
+    # Скачиваем расширенные базы данных маршрутизации
     echo -e "${CYAN}--- Загрузка расширенных баз маршрутизации (Loyalsoldier) ---${NC}"
     curl -L -o /usr/local/share/xray/geosite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
     curl -L -o /usr/local/share/xray/geoip.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
@@ -216,15 +217,36 @@ function init_reality_config() {
     
     echo -e "${CYAN}--- Создание конфига Xray (Reality, SplitHTTP, gRPC) ---${NC}"
     
-    # Используем абсолютный путь, так как среда sudo может обрезать $PATH
-    KEYS=$(/usr/local/bin/xray x25519)
-    PRIVATE_KEY=$(echo "$KEYS" | grep -i "Private key" | awk '{print $3}')
-    PUBLIC_KEY=$(echo "$KEYS" | grep -i "Public key" | awk '{print $3}')
+    # Динамически ищем бинарник Xray (вдруг он от 3x-ui или в другой папке)
+    XRAY_CMD=""
+    for p in /usr/local/bin/xray /usr/bin/xray /opt/xray/xray /usr/local/x-ui/bin/xray-linux-amd64; do
+        if [ -x "$p" ]; then
+            XRAY_CMD="$p"
+            break
+        fi
+    done
+
+    # Если не нашли по жестким путям, пробуем через команду системы
+    if [ -z "$XRAY_CMD" ]; then
+        XRAY_CMD=$(command -v xray)
+    fi
+
+    if [ -z "$XRAY_CMD" ]; then
+        echo -e "${RED}Ошибка: Не удалось найти исполняемый файл Xray в системе. Выполните пункт 1.${NC}"
+        return
+    fi
+
+    # Генерируем ключи с защитой от пустых строк и мусора
+    KEYS=$($XRAY_CMD x25519 2>/dev/null)
+    PRIVATE_KEY=$(echo "$KEYS" | grep -i "Private key" | awk '{print $3}' | tr -d '\r' | tr -d '\n')
+    PUBLIC_KEY=$(echo "$KEYS" | grep -i "Public key" | awk '{print $3}' | tr -d '\r' | tr -d '\n')
     SHORT_ID=$(openssl rand -hex 4)
 
-    # Защита: если ключи не сгенерировались, прерываем создание конфига
+    # Защита: если ключи не сгенерировались
     if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
-        echo -e "${RED}Ошибка: Не удалось сгенерировать ключи Reality. Проверьте, установлен ли Xray (/usr/local/bin/xray).${NC}"
+        echo -e "${RED}Критическая ошибка: Не удалось сгенерировать ключи Reality.${NC}"
+        echo -e "${YELLOW}Использован бинарник: $XRAY_CMD${NC}"
+        echo -e "${YELLOW}Ответ системы: $KEYS${NC}"
         return
     fi
 
@@ -505,15 +527,21 @@ function check_status() {
 
 function update_xray() {
     echo -e "${CYAN}--- Обновление Xray Core и баз маршрутизации ---${NC}"
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install > /dev/null
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
     
-    # ПРАВКА: При апдейте ядра базы тоже надо обновлять
     curl -L -o /usr/local/share/xray/geosite.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
     curl -L -o /usr/local/share/xray/geoip.dat https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
 
     restart_xray
+    
+    XRAY_CMD=""
+    for p in /usr/local/bin/xray /usr/bin/xray /opt/xray/xray /usr/local/x-ui/bin/xray-linux-amd64; do
+        if [ -x "$p" ]; then XRAY_CMD="$p"; break; fi
+    done
+    [ -z "$XRAY_CMD" ] && XRAY_CMD=$(command -v xray)
+    
     echo -e "${GREEN}Текущая версия Xray:${NC}"
-    /usr/local/bin/xray version
+    $XRAY_CMD version
     echo ""
 }
 
