@@ -237,9 +237,10 @@ function init_reality_config() {
     fi
 
     # Генерируем ключи с защитой от пустых строк и мусора
+    # ПРАВКА: Улучшенный парсинг ключей. В новых версиях Xray изменился формат вывода (убрали пробелы).
     KEYS=$($XRAY_CMD x25519 2>/dev/null)
-    PRIVATE_KEY=$(echo "$KEYS" | grep -i "Private key" | awk '{print $3}' | tr -d '\r' | tr -d '\n')
-    PUBLIC_KEY=$(echo "$KEYS" | grep -i "Public key" | awk '{print $3}' | tr -d '\r' | tr -d '\n')
+    PRIVATE_KEY=$(echo "$KEYS" | grep -iE "Private" | awk -F ':' '{print $2}' | tr -d ' \r\n')
+    PUBLIC_KEY=$(echo "$KEYS" | grep -iE "Public" | awk -F ':' '{print $2}' | tr -d ' \r\n')
     SHORT_ID=$(openssl rand -hex 4)
 
     # Защита: если ключи не сгенерировались
